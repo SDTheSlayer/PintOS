@@ -99,10 +99,21 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+  int64_t wakeup=start+ticks;
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  
+  /* Set the priority to MAX so that when it wakes up, it is processed first */
+  thread_priority_temporarily_up();
+  /* Add the thread to sleeper list and block it */
+  thread_sleep(wakeup,start);
+
+  /** Once the thread wakes up! ***/
+  /* Wake next thread with same wakeup time*/
+  thread_set_next_wakeup(); 
+  /* Restore the priority of the thread */
+  thread_priority_restore(); 
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
