@@ -634,6 +634,7 @@ thread_check_wake (struct list_elem * head, int64_t current_tick)
     {
       list_remove(head);
       thread_unblock(cur_thread);
+      intr_yield_on_return();
     }
   }
   return;
@@ -670,10 +671,11 @@ thread_set_next_wakeup()
     struct thread * cur_thread = thread_current(); 
     struct thread * head_thread = list_entry(head,struct thread,elem); 
 
-    if(head_thread->wakeup_time == cur_thread->wakeup_time)
+    if(head_thread->wakeup_time = cur_thread->wakeup_time)
     {
       list_remove(head);
       thread_unblock(head_thread);
+      intr_yield_on_return();
     }
   }
   return;
