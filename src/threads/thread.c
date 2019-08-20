@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "devices/timer.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -634,7 +635,6 @@ thread_check_wake (struct list_elem * head, int64_t current_tick)
     {
       list_remove(head);
       thread_unblock(cur_thread);
-      intr_yield_on_return();
     }
   }
   return;
@@ -665,17 +665,15 @@ thread_sleep(int64_t wakeup_time, int currentTime)
 void 
 thread_set_next_wakeup()
 {
-  struct list_elem * head = list_begin(&sleeper_list);
-  if(head != list_end(&sleeper_list)) 
+  if(!list_empty(&sleeper_list)) // sleeper list is not empty
   {
-    struct thread * cur_thread = thread_current(); 
-    struct thread * head_thread = list_entry(head,struct thread,elem); 
+    struct thread * th = thread_current(); // current running thread
+    struct thread * th2 = list_entry(list_begin(&sleeper_list),struct thread,elem); // thread corresponding to the head of the sleeper list
 
-    if(head_thread->wakeup_time = cur_thread->wakeup_time)
+    if(th2->wakeup_time == th->wakeup_time)
     {
-      list_remove(head);
-      thread_unblock(head_thread);
-      intr_yield_on_return();
+      list_pop_front(&sleeper_list);
+      thread_unblock(th2);
     }
   }
   return;
