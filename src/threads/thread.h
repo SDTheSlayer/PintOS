@@ -88,13 +88,14 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int initial_priority;               /***  Original Priority at time of creation  ***/
-    int64_t wakeup_time;                /***  Wakeup time ***/ 
+    int old_priority;                   /* Old Priority. */
+    int64_t wakeup_at;                  /* Time to wait before unblock. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    struct list_elem sleepers_elem;     /* List element for sleepers_list. */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -121,6 +122,9 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
+void thread_block_till (int64_t);
+void thread_set_next_wakeup (void);
+
 struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
@@ -140,11 +144,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void thread_check_wake (struct list_elem * , int64_t );
+bool priority_cmp (const struct list_elem*, const struct list_elem*, void*);
+bool before (const struct list_elem*, const struct list_elem*, void*);
 
-void thread_priority_temporarily_up(void);
-void thread_priority_restore(void);
-void thread_sleep(int64_t,int);
-void thread_set_next_wakeup(void);
+void thread_priority_temporarily_up (void);
+void thread_priority_restore (void);
 
 #endif /* threads/thread.h */
