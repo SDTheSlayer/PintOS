@@ -101,6 +101,7 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    struct list locks_acquired ; /* Locks accquired list */
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -138,6 +139,7 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+int thread_get_effective_priority(struct thread*);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

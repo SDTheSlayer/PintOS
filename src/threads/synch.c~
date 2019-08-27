@@ -50,20 +50,6 @@ sema_init (struct semaphore *sema, unsigned value)
   list_init (&sema->waiters);
 }
 
-/*Function to order the elements according to thread priority*/
-static bool th_before(const struct list_elem *a,const struct list_elem *b,void *aux UNUSED)  
-{
-  return list_entry(a,struct thread,elem)->priority>list_entry(b,struct thread,elem)->priority; 
-
-}
-/* sort the semaphore according to thread priority */
-void
-update_sema_list(struct semaphore *sema)
-{
-
-  list_sort( &(sema->waiters), th_before, NULL);
-}
-
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
 
@@ -80,15 +66,13 @@ sema_down (struct semaphore *sema)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-
-  // update_sema_list(sema);  
   while (sema->value == 0) 
     {
-      list_insert_ordered(&(sema->waiters), &thread_current ()->elem,th_before,NULL);
+      list_insert_ordered (&(sema->waiters), &thread_current ()->elem,
+                           priority_cmp, NULL);
       thread_block ();
     }
   sema->value--;
-
   intr_set_level (old_level);
 }
 
@@ -130,17 +114,15 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  
   if (!list_empty (&sema->waiters)) 
-  {
-    // update_sema_list(sema);             /*sort the list so that highest priority is popped*/
-    struct thread *th = list_entry (list_pop_front (&sema->waiters), struct thread, elem);
-    thread_unblock (th);
-  }
-
+    thread_unblock (list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem));
   sema->value++;
-  // thread_check_prio();                  /*the thread just unblocked might have highest priority and so should be yielded*/
   intr_set_level (old_level);
+  
+  /* The thread unblocked might have higher priority than the current thread.
+     We must yield to that thread in this case. */
+  thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -276,6 +258,25 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
+
+/* Comparision function used for getting the semaphore element corresponding 
+   to highest priority in condition wait list. */
+bool
+cond_cmp (struct list_elem *a, struct list_elem *b, void *aux)
+{
+  struct semaphore_elem *ma = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *mb = list_entry (b, struct semaphore_elem, elem);
+
+  struct list_elem *la = list_front (&(ma->semaphore.waiters));
+  struct list_elem *lb = list_front (&(mb->semaphore.waiters));
+
+  struct thread *ta = list_entry (la, struct thread, elem);
+  struct thread *tb = list_entry (lb, struct thread, elem);
+
+  return thread_get_effective_priority (ta) >
+    thread_get_effective_priority (tb);
+}
+
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -318,7 +319,8 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  list_push_back(&cond->waiters, &waiter.elem);
+  //list_insert_ordered(&cond->waiters, &waiter.elem,cond_cmp,NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -340,8 +342,17 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  {
+	 struct list_elem *m = list_max(&cond->waiters, cond_cmp, NULL);
+    	 list_remove (m);
+    	 sema_up (&(list_entry (m, struct semaphore_elem, elem)->semaphore));
+
+        /* Sort the waiter list of cond on the basis of the priorities of the first thread in each of the semaphore's waiters list. */
+	/*** list_insert_ordered is not working in sema down***/
+	/*list_sort (&cond->waiters, cond_cmp, NULL);   
+  	sema_up (&list_entry (list_pop_front (&cond->waiters),
+                          struct semaphore_elem, elem)->semaphore);*/
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

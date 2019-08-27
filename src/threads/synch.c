@@ -68,8 +68,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_insert_ordered (&(sema->waiters), &thread_current ()->elem,
-                           priority_cmp, NULL);
+      list_push_back (&(sema->waiters), &thread_current ()->elem);
       thread_block ();
     }
   sema->value--;
@@ -106,6 +105,16 @@ sema_try_down (struct semaphore *sema)
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
+bool
+priority_sema (const struct list_elem *a, const struct list_elem *b,void *aux UNUSED)
+{
+  struct thread *ta = list_entry (a, struct thread, elem);
+  struct thread *tb = list_entry (b, struct thread, elem);
+
+  return thread_get_effective_priority (ta) < thread_get_effective_priority (tb);
+}
+
+
 void
 sema_up (struct semaphore *sema) 
 {
@@ -114,9 +123,12 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters))
+  {
+    struct list_elem *e = list_max (&sema->waiters, priority_sema, NULL);
+    list_remove (e);
+    thread_unblock (list_entry (e, struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
   
@@ -202,7 +214,10 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  struct thread * cur_thread =thread_current ();
+  list_push_back (&cur_thread->locks_acquired, &lock->locks_acquired_elem);
+  lock->holder = cur_thread;
+
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -237,7 +252,8 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
+  list_remove(&lock->locks_acquired_elem);
+  sema_up (&lock->semaphore); 
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -257,6 +273,24 @@ struct semaphore_elem
     struct list_elem elem;              /* List element. */
     struct semaphore semaphore;         /* This semaphore. */
   };
+
+
+/* Comparision function used for getting the semaphore element corresponding 
+   to highest priority in condition wait list. */
+bool
+cond_cmp (struct list_elem *a, struct list_elem *b, void *aux UNUSED)
+{
+  struct semaphore_elem *sema_list_a = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *sema_list_b = list_entry (b, struct semaphore_elem, elem);
+
+  struct list_elem *thread_list_a = list_front (&(sema_list_a->semaphore.waiters));
+  struct list_elem *thread_list_b = list_front (&(sema_list_b->semaphore.waiters));
+
+  struct thread *thread_a = list_entry (thread_list_a, struct thread, elem);
+  struct thread *thread_b = list_entry (thread_list_b, struct thread, elem);
+
+  return thread_get_effective_priority (thread_a) < thread_get_effective_priority (thread_b);
+}
 
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
@@ -300,7 +334,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  list_push_back(&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -322,8 +356,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  {
+    struct list_elem *m = list_max (&cond->waiters, cond_cmp, NULL);
+    list_remove (m);
+    sema_up (&(list_entry (m, struct semaphore_elem, elem)->semaphore));
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

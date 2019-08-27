@@ -1,4 +1,4 @@
-Writing command line to /tmp/8pbbytJi8e.dsk...
+Writing command line to /tmp/QrcyKnHFUR.dsk...
 squish-pty bochs -q
 ========================================================================
                        Bochs x86 Emulator 2.5.1
@@ -17,24 +17,24 @@ Executing 'alarm-simultaneous':
 (alarm-simultaneous) Each thread sleeps 10 ticks each time.
 (alarm-simultaneous) Within an iteration, all threads should wake up on the same tick.
 (alarm-simultaneous) iteration 0, thread 0: woke up after 10 ticks
-(alarm-simultaneous) iteration 0, thread 1: woke up 10 ticks later
-(alarm-simultaneous) iteration 0, thread 2: woke up 10 ticks later
+(alarm-simultaneous) iteration 0, thread 1: woke up 0 ticks later
+(alarm-simultaneous) iteration 0, thread 2: woke up 0 ticks later
 (alarm-simultaneous) iteration 1, thread 0: woke up 10 ticks later
-(alarm-simultaneous) iteration 1, thread 1: woke up 10 ticks later
-(alarm-simultaneous) iteration 1, thread 2: woke up 110 ticks later
-(alarm-simultaneous) iteration 2, thread 0: woke up 0 ticks later
-(alarm-simultaneous) iteration 2, thread 1: woke up 9 ticks later
+(alarm-simultaneous) iteration 1, thread 1: woke up 0 ticks later
+(alarm-simultaneous) iteration 1, thread 2: woke up 0 ticks later
+(alarm-simultaneous) iteration 2, thread 0: woke up 10 ticks later
+(alarm-simultaneous) iteration 2, thread 1: woke up 0 ticks later
 (alarm-simultaneous) iteration 2, thread 2: woke up 0 ticks later
-(alarm-simultaneous) iteration 3, thread 0: woke up 8 ticks later
+(alarm-simultaneous) iteration 3, thread 0: woke up 10 ticks later
 (alarm-simultaneous) iteration 3, thread 1: woke up 0 ticks later
-(alarm-simultaneous) iteration 3, thread 2: woke up 8 ticks later
-(alarm-simultaneous) iteration 4, thread 0: woke up 0 ticks later
-(alarm-simultaneous) iteration 4, thread 1: woke up 8 ticks later
+(alarm-simultaneous) iteration 3, thread 2: woke up 0 ticks later
+(alarm-simultaneous) iteration 4, thread 0: woke up 10 ticks later
+(alarm-simultaneous) iteration 4, thread 1: woke up 0 ticks later
 (alarm-simultaneous) iteration 4, thread 2: woke up 0 ticks later
 (alarm-simultaneous) end
 Execution of 'alarm-simultaneous' complete.
-Timer: 452 ticks
-Thread: 250 idle ticks, 205 kernel ticks, 0 user ticks
-Console: 1614 characters output
+Timer: 450 ticks
+Thread: 248 idle ticks, 205 kernel ticks, 0 user ticks
+Console: 1612 characters output
 Keyboard: 0 keys pressed
 Powering off...
