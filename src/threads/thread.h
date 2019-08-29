@@ -96,6 +96,10 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     struct list_elem sleepers_elem;     /* List element for sleepers_list. */
+
+    int nice;                           /* Nice Value. */
+    int recent_cpu;                     /* Approximation of recent 
+                                           cpu time used by this thread. */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -104,6 +108,8 @@ struct thread
     struct list locks_acquired ; /* Locks accquired list */
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+
   };
 
 /* If false (default), use round-robin scheduler.
@@ -151,5 +157,13 @@ bool before (const struct list_elem*, const struct list_elem*, void*);
 
 void thread_priority_temporarily_up (void);
 void thread_priority_restore (void);
+
+
+void manager_wakeup(void);
+void timer_wakeup(void);
+
+void thread_update_priority (struct thread *);
+void thread_update_recent_cpu (struct thread *);
+void thread_update_load_avg (void);
 
 #endif /* threads/thread.h */
