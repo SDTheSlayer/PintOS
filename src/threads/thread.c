@@ -12,10 +12,9 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
-#include "devices/timer.c"
-#include "devices/timer.h"
 #endif
 
 /* Tasks */
@@ -27,9 +26,6 @@ static struct list sleepers_list;
 
 /* Stores the next wake up tick time. */
 static int64_t next_wakeup_at;
-
-
-#define TIMER_FREQ 100
 
 
 /* Random value for struct thread's `magic' member.
@@ -143,13 +139,14 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
-  thread_create ("manager_thread", PRI_MAX, manager_wakeup, NULL);
-  thread_create ("bsd_scheduler", PRI_MAX, bsd_scheduler, NULL);
+
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
+    thread_create ("manager_thread", PRI_MAX, manager_wakeup, NULL);
+  thread_create ("bsd_scheduler", PRI_MAX, bsd_scheduler, NULL);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -177,18 +174,24 @@ thread_tick (void)
   {
     thread_unblock (manager_thread);
   }
+
 /*** Makes schedule_sec true after every 100 ticks ***/
 if (ticks % TIMER_FREQ == 0)
     schedule_sec = true;
+
+    /*** schedule_sec for Task 2 and schedule_slice for Task 3 ***/
+  if ((schedule_sec || schedule_slice) && bsd_scheduler_thread->status == THREAD_BLOCKED && thread_mlfqs)
+  {
+    thread_unblock (bsd_scheduler_thread);
+    intr_yield_on_return ();
+  }
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
   {
     schedule_slice = true;
     intr_yield_on_return ();
   }
-  /*** schedule_sec for Task 2 and schedule_slice for Task 3 ***/
-  if ((schedule_sec || schedule_slice) && bsd_scheduler_thread->status == THREAD_BLOCKED)
-    thread_unblock (bsd_scheduler_thread);
 }
 
 /* Prints thread statistics. */
@@ -216,6 +219,7 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+  // printf("%s\n",name );
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -522,7 +526,16 @@ next_thread_to_run (void)
   /* Ready list is no more ordered , hence remove list_max */
   else
   {
-    struct list_elem *e = list_max (&ready_list, priority_cmp, NULL);
+    struct list_elem *e;
+    if(thread_mlfqs==true)
+    {
+       e= list_max (&ready_list, priority_cmp_mlfqs, NULL);
+    }
+    else
+    {
+      e = list_max (&ready_list, priority_cmp, NULL);
+    }
+    
     list_remove (e);
     return list_entry (e, struct thread, elem);
   }
@@ -636,12 +649,19 @@ thread_priority_restore()
 /* Comparision function used for sorting ready_list in accordance with
    their priority in descending order. */
 bool
+priority_cmp_mlfqs (const struct list_elem *a, const struct list_elem *b,
+        void *aux UNUSED)
+{
+  struct thread *ta = list_entry (a, struct thread, elem);
+  struct thread *tb = list_entry (b, struct thread, elem);
+  return ta->priority < tb->priority ;
+}
+bool
 priority_cmp (const struct list_elem *a, const struct list_elem *b,
         void *aux UNUSED)
 {
   struct thread *ta = list_entry (a, struct thread, elem);
   struct thread *tb = list_entry (b, struct thread, elem);
-
   return thread_get_effective_priority (ta) < thread_get_effective_priority (tb);
 }
 
@@ -751,6 +771,10 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  if (thread_mlfqs)
+  {
+    return thread_current()->priority;
+  }
   return thread_get_effective_priority(thread_current());
 }
 
@@ -844,10 +868,8 @@ timer_wakeup (void)
 void
 thread_update_priority (struct thread *t)
 {
-  enum intr_level old_level = intr_disable ();
   int aux = _ADD_INT (_DIVIDE_INT (t->recent_cpu, 4), 2*t->nice);
   t->priority = _TO_INT_ZERO (_INT_SUB (PRI_MAX, aux));
-  intr_set_level (old_level);
 }
 
 /* Updates recent_cpu value using:
@@ -933,24 +955,9 @@ void bsd_scheduler ()
     old_level = intr_disable ();
     thread_block ();
     intr_set_level (old_level);
-
+    old_level = intr_disable ();
     /* Use MLFQS only if the flag is set at kernel boot. */
     if(thread_mlfqs){
-      if (schedule_slice)
-      {
-        for (e = list_begin (&all_list); e != list_end (&all_list);
-             e = list_next (e))
-        {
-          struct thread *t = list_entry (e, struct thread, allelem);
-          if (t != manager_thread &&
-              t != bsd_scheduler_thread &&
-              t != idle_thread)
-          {
-            thread_update_priority (t);
-          }
-        }
-        schedule_slice = false;
-      }
       if (schedule_sec)
       {
         thread_update_load_avg ();
@@ -967,6 +974,22 @@ void bsd_scheduler ()
         }
         schedule_sec = false;
       }
+      if (schedule_slice)
+      {
+        for (e = list_begin (&all_list); e != list_end (&all_list);
+             e = list_next (e))
+        {
+          struct thread *t = list_entry (e, struct thread, allelem);
+          if (t != manager_thread &&
+              t != bsd_scheduler_thread &&
+              t != idle_thread)
+          {
+            thread_update_priority (t);
+          }
+        }
+        schedule_slice = false;
+      }
     }
+    intr_set_level (old_level);
   }
 }

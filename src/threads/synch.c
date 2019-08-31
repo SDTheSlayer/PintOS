@@ -111,7 +111,11 @@ priority_sema (const struct list_elem *a, const struct list_elem *b,void *aux UN
   struct thread *ta = list_entry (a, struct thread, elem);
   struct thread *tb = list_entry (b, struct thread, elem);
 
+    if(thread_mlfqs!=true)
+  {
   return thread_get_effective_priority (ta) < thread_get_effective_priority (tb);
+  }
+  return ta->priority < tb->priority ;
 }
 
 
@@ -289,7 +293,11 @@ cond_cmp (struct list_elem *a, struct list_elem *b, void *aux UNUSED)
   struct thread *thread_a = list_entry (thread_list_a, struct thread, elem);
   struct thread *thread_b = list_entry (thread_list_b, struct thread, elem);
 
+   if(thread_mlfqs!=true)
+  {
   return thread_get_effective_priority (thread_a) < thread_get_effective_priority (thread_b);
+  }
+  return thread_a->priority < thread_b->priority ;
 }
 
 /* Initializes condition variable COND.  A condition variable

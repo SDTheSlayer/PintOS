@@ -109,7 +109,7 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 
-
+    bool no_yield;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -152,6 +152,8 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+
+bool priority_cmp_mlfqs (const struct list_elem*, const struct list_elem*, void*);
 bool priority_cmp (const struct list_elem*, const struct list_elem*, void*);
 bool before (const struct list_elem*, const struct list_elem*, void*);
 
