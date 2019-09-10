@@ -1,0 +1,14 @@
+UP01
+
+group04  pts/15       172.16.115.33    Tue Sep 10 15:47   still logged in   
+group04  pts/11       172.16.115.22    Tue Sep 10 15:14   still logged in   
+group04  pts/11       172.16.115.22    Tue Sep 10 14:01 - 15:13  (01:11)    
+group04  pts/7        10.10.2.6        Tue Sep 10 13:18 - 13:19  (00:01)    
+group04  pts/7        10.10.2.6        Mon Sep  9 09:33 - 09:34  (00:00)    
+group04  pts/9        10.10.2.6        Sat Sep  7 20:05 - 00:18  (04:12)    
+group04  pts/13       10.3.2.15        Sat Sep  7 14:12 - 14:29  (00:16)    
+group04  pts/13       10.3.2.15        Fri Sep  6 13:26 - 15:47  (02:21)    
+group04  pts/6        10.10.2.6        Thu Sep  5 19:57 - 01:54  (05:56)    
+group04  pts/34       172.16.115.33    Wed Sep  4 10:50 - 11:04  (00:14)    
+group04  pts/52       10.3.2.15        Wed Sep  4 10:00 - 12:37  (02:37)    
+group04  pts/25       10.9.11.24       Wed Sep  4 09:24 - 10:24  (01:00)
