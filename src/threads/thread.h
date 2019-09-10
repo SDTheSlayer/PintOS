@@ -106,10 +106,9 @@ struct thread
 #endif
 
     struct list locks_acquired ; /* Locks accquired list */
+    bool no_yield;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-
-    bool no_yield;
   };
 
 /* If false (default), use round-robin scheduler.
