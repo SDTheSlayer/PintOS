@@ -501,6 +501,14 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->locks_acquired);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+/** UP03 **/
+  int i;
+  for (i = 0; i<MAX_FILES; i++)
+  {
+    t->files[i] = NULL;
+  }
+
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
