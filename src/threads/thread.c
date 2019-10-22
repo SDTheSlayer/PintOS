@@ -502,13 +502,28 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 /** UP03 **/
+   t->executable_file = NULL;
   int i;
   for (i = 0; i<MAX_FILES; i++)
   {
     t->files[i] = NULL;
   }
 
-
+  /* Set parent pointer, initialise children list, push to parent list. */
+  if (t != initial_thread)
+  {
+    t->parent = thread_current();
+    list_push_back (&(t->parent->children), &t->parent_elem);
+  }
+  else
+    t->parent = NULL;
+  
+  list_init (&t->children);
+  sema_init (&t->sema_ready, 0);
+  sema_init (&t->sema_terminated, 0);
+  sema_init (&t->sema_ack, 0);
+  t->return_status = -1;
+  t->load_complete = false;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -995,4 +1010,26 @@ void bsd_scheduler ()
     }
     intr_set_level (old_level);
   }
+}
+
+
+
+struct thread *
+get_child_thread_from_id (int id)
+{
+  struct thread *t = thread_current ();
+  struct list_elem *e;
+  struct thread *child = NULL;
+
+  for (e = list_begin (&t->children);
+       e!= list_end (&t->children); e = list_next (e))
+  {
+    struct thread *this = list_entry (e, struct thread, parent_elem);
+    if (this->tid == id)
+    {
+      child = this;
+      break;
+    }
+  }
+  return child;
 }

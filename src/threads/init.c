@@ -282,7 +282,16 @@ run_task (char **argv)
   
   printf ("Executing '%s':\n", task);
 #ifdef USERPROG
-  process_wait (process_execute (task));
+  tid_t tid = process_execute (task);
+  struct thread *child = get_child_thread_from_id (tid);
+
+  if (child != NULL)
+  {
+    //sema_down (&child->sema_ready);
+    sema_up (&child->sema_ack);
+  }
+
+  process_wait (tid);
 #else
   run_test (task);
 #endif

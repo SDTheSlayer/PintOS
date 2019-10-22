@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include "threads/synch.h"
 #include <stdint.h>
 
 /* States in a thread's life cycle. */
@@ -115,6 +116,18 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
     /** UP03 **/
     struct file *files[MAX_FILES];
+
+    struct list_elem parent_elem;       /* list_elem for parent's children list */
+    struct thread *parent;              /* Pointer to parent of the list. */
+    struct list children;               /* List of children of 
+                                           the current thread. */
+
+    struct semaphore sema_ready;
+    struct semaphore sema_terminated;
+    struct semaphore sema_ack;
+    int return_status;
+    bool load_complete;
+    struct file *executable_file;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -172,5 +185,7 @@ void timer_wakeup(void);
 void thread_update_priority (struct thread *);
 void thread_update_recent_cpu (struct thread *);
 void thread_update_load_avg (void);
+
+struct thread *get_child_thread_from_id (int);
 
 #endif /* threads/thread.h */
