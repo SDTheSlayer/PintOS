@@ -83,11 +83,10 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   if (!success){
     sema_up (&cur->sema_ready);
-    sema_down (&cur->sema_ack);
-
     enum intr_level old_level = intr_disable ();
     cur->no_yield = true;
     sema_up (&cur->sema_terminated);
+    
     thread_block ();
     intr_set_level (old_level);
 
@@ -96,6 +95,7 @@ start_process (void *file_name_)
 
   cur->load_complete = true;
   sema_up (&cur->sema_ready);
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -123,10 +123,10 @@ process_wait (tid_t child_tid UNUSED)
      given tid is not a child of current thread. */
   if (child == NULL) 
     return -1;
-  
+    list_remove (&child->parent_elem);
   sema_down (&child->sema_terminated);
   int status = child->return_status;
-  list_remove (&child->parent_elem);
+
   thread_unblock (child);
 
   return status;

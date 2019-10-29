@@ -66,11 +66,11 @@ exit (void *esp)
   enum intr_level old_level = intr_disable ();
   t->no_yield = true;
   sema_up (&t->sema_terminated);
+  
   thread_block ();
   intr_set_level (old_level);
 
   thread_exit ();
-  NOT_REACHED ();
 }
 
 static int
@@ -92,8 +92,6 @@ exec (void *esp)
   sema_down (&child->sema_ready);
   if (!child->load_complete)
     tid = -1;
-
-  sema_up (&child->sema_ack);
   return tid;
 } 
 
@@ -108,10 +106,10 @@ wait (void *esp)
      given pid is not a child of current thread. */
   if (child == NULL) 
     return -1;
-
+  list_remove (&child->parent_elem);
   sema_down (&child->sema_terminated);
   int status = child->return_status;
-  list_remove (&child->parent_elem);
+
   thread_unblock (child);
   return status;
 }
