@@ -33,11 +33,10 @@ static void
 add_to_frame_table (void *frame, struct spt_entry *spte) {
   struct frame_table_entry *fte =
     (struct frame_table_entry *) malloc (sizeof (struct frame_table_entry));
-
+lock_acquire (&frame_table_lock);
   fte->frame = frame;
   fte->spte = spte;
   fte->t = thread_current ();
-  lock_acquire (&frame_table_lock);
   list_push_back (&frame_table, &fte->elem);
   lock_release (&frame_table_lock);
 }

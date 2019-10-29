@@ -5,6 +5,7 @@
 #include <list.h>
 #include "threads/synch.h"
 #include <stdint.h>
+#include "vm/page.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -121,7 +122,7 @@ struct thread
     struct thread *parent;              /* Pointer to parent of the list. */
     struct list children;               /* List of children of 
                                            the current thread. */
-
+    struct hash supp_page_table;
     struct semaphore sema_ready;
     struct semaphore sema_terminated;
     struct semaphore sema_ack;

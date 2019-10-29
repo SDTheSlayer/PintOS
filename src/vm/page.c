@@ -1,5 +1,12 @@
 #include "vm/page.h"
+#include <malloc.h>
 #include "threads/synch.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "threads/palloc.h"
+#include "userprog/process.h"
+#include "filesys/file.h"
+
 
 /*
   Naming convention for pages and frames:
@@ -7,7 +14,7 @@
   frame, kpage => always installed at PD, PT
   (associated with a kernel virtual address taken from user_pool)
   only free is available
-  
+
   upage => referenced by SPT of the parent thread.
   may be uninstalled or installed (loaded) to a frame (kpage) 
   file means readonly executable file
@@ -35,11 +42,33 @@ spt_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux)
 }
 
 void
-supp_page_table_init ()
+supp_page_table_init (struct hash *supp_page_table)
 {
   hash_init (&supp_page_table, spt_hash_func, spt_less_func, NULL);
-  lock_init (&spt_lock);
+  
 }
+
+struct spt_entry *
+uvaddr_to_spt_entry (void *uvaddr)
+{
+  void *upage = pg_round_down (uvaddr);
+  struct spt_entry spte;
+  spte.upage = upage;
+
+  struct hash_elem *e = hash_find (
+    &thread_current()->supp_page_table, &spte.elem);
+
+  if (e)
+    return hash_entry (e, struct spt_entry, elem);
+  else
+    return NULL;
+}
+
+
+
+
+
+
 
 static struct spt_entry *
 create_spte ()
@@ -51,20 +80,53 @@ create_spte ()
   return spte;
 }
 
-void
+struct spt_entry *
 create_spte_code (void *upage)
 {
   struct spt_entry *spte = create_spte ();
   spte->type = CODE;
   spte->upage = upage;
-  lock_acquire (&spt_lock);
-  hash_insert (&supp_page_table, &spte->elem);
-  lock_release (&spt_lock);
+  hash_insert (&((thread_current())->supp_page_table), &spte->elem);
+  return spte;
+
 }
 
-void
-create_spte_file ()
+bool
+create_spte_file (struct file *file, off_t ofs, uint8_t *upage,
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+      struct spt_entry *spte = create_spte ();
+      spte->type = FILE;
+      spte->upage = upage;
+      spte->page_read_bytes = page_read_bytes;
+      spte->page_zero_bytes = page_zero_bytes;
+      spte->file = file;
+      spte->ofs = ofs;
+      spte->writable = writable;
+      ofs += page_read_bytes;
+
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+
+      hash_insert (&((thread_current())->supp_page_table), &spte->elem);
+    }
+  return true;
+
+
 
 }
 
@@ -75,8 +137,35 @@ create_spte_mmap ()
 }
 
 bool
-load_file (struct spt_entry *spte)
+install_load_file (struct spt_entry *spte)
 {
+  void *frame = get_frame_for_page (PAL_USER, spte);
+
+  if (frame == NULL)
+    return false;
+
+  /* Load this page. */
+  lock_acquire (&file_lock);
+  file_seek (spte->file, spte->ofs);
+  int read_bytes = file_read (spte->file, frame, spte->page_read_bytes);
+  lock_release (&file_lock);
+
+  if (read_bytes != (int) spte->page_read_bytes)
+  {
+    free_frame (frame);
+    return false; 
+  }
+  memset (frame + spte->page_read_bytes, 0, spte->page_zero_bytes);
+
+  /* Add the page to the process's address space. */
+  if (!install_page (spte->upage, frame, spte->writable)) 
+  {
+    free_frame (frame);
+    return false; 
+  }
+  return true;
+
+
 
 }
 
@@ -97,11 +186,16 @@ install_load_page (struct spt_entry *spte)
 {
   switch (spte->type){
   case FILE:
-    load_file (spte);
+    return install_load_file (spte);
+    break;
   case MMAP:
-    load_mmap (spte);
+    return load_mmap (spte);
+    break;
   case CODE:
-    load_swap (spte);
+    return load_swap (spte);
+    break;
+  default:
+    return false;
   }
 }
 
@@ -118,7 +212,8 @@ free_spte (struct hash_elem *e, void *aux)
 }
 
 void destroy_spt (){
-  lock_acquire (&spt_lock);
+
   hash_destroy (&supp_page_table, free_spte);
-  lock_release (&spt_lock);
+
 }
+

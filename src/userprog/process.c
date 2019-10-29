@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "vm/frame.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -18,6 +17,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 
 const int WORD_SIZE = 4; /* Number of bytes per word */
 
@@ -373,7 +374,6 @@ done:
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -565,7 +565,7 @@ setup_stack (void **esp, char *file_name, char *args)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+ bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();

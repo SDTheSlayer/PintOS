@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
+#include "vm/page.h"
+#include "userprog/process.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -146,19 +148,41 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+   bool loaded = false;
   /* We should not panic when user space code is violating memory access*/
-  if ((not_present || !is_user_vaddr (fault_addr) || fault_addr == NULL) && user)
+  if (user)
   {
-    exit (NULL);
+    if (!is_user_vaddr (fault_addr) || fault_addr == NULL)
+      exit (NULL);
+
+    if (not_present)
+    {
+      struct spt_entry *spte = uvaddr_to_spt_entry (fault_addr);
+
+      if (spte != NULL && install_load_page (spte))
+        loaded = true;
+
+      if (!loaded)
+        exit (NULL);
+    }
+    else
+    {
+      struct spt_entry *spte = uvaddr_to_spt_entry (fault_addr);
+      if (write && !spte->writable)
+        exit (NULL);
+    }
   }
-  
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+
+  if (!loaded){
+    /* To implement virtual memory, delete the rest of the function
+       body, and replace it with code that brings in the page to
+       which fault_addr refers. */
+    printf ("Page fault at %p: %s error %s page in %s context.\n",
+            fault_addr,
+            not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
+    kill (f);
 }
+}
+  

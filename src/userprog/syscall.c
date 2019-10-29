@@ -1,19 +1,21 @@
+ 
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/init.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
-#include <string.h>
-
+#include "vm/page.h"
+#include "filesys/filesys.h"
 
 /** UP03 **/
 #include "threads/synch.h"
 /* Lock for file system calls. */
-static struct lock file_lock;
+//static struct lock file_lock;
 static void validate (const void *, size_t);
 static void validate_string (const char *);
 static void close_file (int);
