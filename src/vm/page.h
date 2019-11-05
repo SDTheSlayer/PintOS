@@ -5,7 +5,6 @@
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 
-
 enum spte_type
   {
     CODE = 0, /* Only code is swappable. */
@@ -21,11 +20,10 @@ struct spt_entry
                      installed and loaded (or being loaded). */
     struct hash_elem elem;
 
-
     /* CODE */
     bool is_in_swap;
-
-    /* FILE */
+    
+    /* FILE & MMAP */
     struct file *file;
     off_t ofs;
     bool writable;
@@ -38,7 +36,13 @@ void supp_page_table_init (struct hash *);
 struct spt_entry *uvaddr_to_spt_entry (void *);
 
 bool grow_stack (void *);
+
 bool create_spte_file (struct file *, off_t, uint8_t *,
                        uint32_t, uint32_t, bool);
+struct spt_entry* create_spte_mmap (struct file *, int, void *);
 
+void destroy_spt (struct hash *);
+void free_spte_mmap (struct spt_entry *);
+
+bool write_to_disk (struct spt_entry *);
 #endif

@@ -117,6 +117,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
     /** UP03 **/
     struct file *files[MAX_FILES];
+    struct spt_entry *mmap_files[MAX_FILES];
 
     struct list_elem parent_elem;       /* list_elem for parent's children list */
     struct thread *parent;              /* Pointer to parent of the list. */

@@ -506,6 +506,7 @@ init_thread (struct thread *t, const char *name, int priority)
   int i;
   for (i = 0; i<MAX_FILES; i++)
   {
+    t->mmap_files[i] = NULL;
     t->files[i] = NULL;
   }
 

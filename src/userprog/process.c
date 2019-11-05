@@ -140,15 +140,18 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct hash *supp_page_table;
 
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
-  pd = cur->pagedir;
+  /* Close current process's executable file and allow write. */
   if (cur->executable_file)
   {
     file_close (cur->executable_file);
     cur->executable_file = NULL;
   }
+
+   /* Destroy the current process's page directory and switch back
+     to the kernel-only page directory. */
+  pd = cur->pagedir;
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -347,7 +350,7 @@ load (const char *cmd_line_input, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
 
-              if (!load_segment (file, file_page, (void *) mem_page,
+               if (!create_spte_file (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -474,7 +477,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
     }
   return true;
 }
-
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
@@ -482,77 +484,76 @@ setup_stack (void **esp, char *file_name, char *args)
 {
   uint8_t *kpage;
   bool success = false;
-
+  /*
   kpage = frame_alloc (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success){
-        *esp = PHYS_BASE;
+    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);*/
 
-        /* Tokenize the string accross spaces (DELIMITER) */
-        char *token, *save_ptr;
-        int argc = 1;
-        char *argv[LOADER_ARGS_LEN / 2 + 1];
-        argv[0] = file_name;
+  success = grow_stack (((uint8_t *) PHYS_BASE) - PGSIZE);
+  if (success){
+    *esp = PHYS_BASE;
 
-        for (token = strtok_r (args, " ", &save_ptr); token != NULL;
-             token = strtok_r (NULL, " ", &save_ptr))
-        {
-          argv[argc] = token;
-          argc++;
-        }
-        argv[argc] = NULL;
+    /* Tokenize the string accross spaces (DELIMITER) */
+    char *token, *save_ptr;
+    int argc = 1;
+    char *argv[LOADER_ARGS_LEN / 2 + 1];
+    argv[0] = file_name;
 
-        /* Push the args to the stack */
-        int i, bytes_written = 0;
-        char *addr[LOADER_ARGS_LEN / 2 + 1];
-        size_t s;
-        
-        for (i = argc-1; i>=0; i--)
-        {
-          s = (strlen(argv[i]) + 1) * (sizeof (char));
-          *esp -= s;
-          memcpy (*esp, argv[i], s);
-          bytes_written += s;
-          addr[i] = (char *) *esp;
-        }
-        addr[argc] = NULL;
-
-        /* Align the stack pointer location to nearest WORD_SIZE multiple */
-        uint8_t nulls[3] = {0,0,0};
-        s = bytes_written % WORD_SIZE;
-        *esp -= s;
-        memcpy (*esp, nulls, s);
-
-        /* Push addresses of argv array. */
-        for (i = argc; i>=0; i--)
-        {
-          s = (sizeof (char *));
-          *esp -= s;
-          memcpy (*esp, addr + i, s);
-        }
-
-        /* Push argv start address. */
-        char *argv_starting = *esp; 
-        s = sizeof (argv_starting);
-        *esp -= s;
-        memcpy(*esp, &argv_starting, s);
-
-        /* Push argc. */
-        s = sizeof (int);
-        *esp -= s;
-        memcpy (*esp, &argc, s);
-
-        /* Push return address (UNUSED). */
-        argc = 0;
-        s = sizeof (void (*) ());
-        *esp -= s;
-        memcpy (*esp, &argc, s);
-      }
-      else
-        free_frame (kpage);
+    for (token = strtok_r (args, " ", &save_ptr); token != NULL;
+         token = strtok_r (NULL, " ", &save_ptr))
+    {
+      argv[argc] = token;
+      argc++;
     }
+    argv[argc] = NULL;
+
+    /* Push the args to the stack */
+    int i, bytes_written = 0;
+    char *addr[LOADER_ARGS_LEN / 2 + 1];
+    size_t s;
+        
+    for (i = argc-1; i>=0; i--)
+    {
+      s = (strlen(argv[i]) + 1) * (sizeof (char));
+      *esp -= s;
+      memcpy (*esp, argv[i], s);
+      bytes_written += s;
+      addr[i] = (char *) *esp;
+    }
+    addr[argc] = NULL;
+
+    /* Align the stack pointer location to nearest WORD_SIZE multiple */
+    uint8_t nulls[3] = {0,0,0};
+    s = bytes_written % WORD_SIZE;
+    *esp -= s;
+    memcpy (*esp, nulls, s);
+
+    /* Push addresses of argv array. */
+    for (i = argc; i>=0; i--)
+    {
+      s = (sizeof (char *));
+      *esp -= s;
+      memcpy (*esp, addr + i, s);
+    }
+
+    /* Push argv start address. */
+    char *argv_starting = *esp; 
+    s = sizeof (argv_starting);
+    *esp -= s;
+    memcpy(*esp, &argv_starting, s);
+
+    /* Push argc. */
+    s = sizeof (int);
+    *esp -= s;
+    memcpy (*esp, &argc, s);
+
+    /* Push return address (UNUSED). */
+    argc = 0;
+    s = sizeof (void (*) ());
+    *esp -= s;
+    memcpy (*esp, &argc, s);
+  }
   return success;
 }
 
