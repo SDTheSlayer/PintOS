@@ -3,8 +3,8 @@
 
 #include <debug.h>
 #include <list.h>
-#include "threads/synch.h"
 #include <stdint.h>
+#include "threads/synch.h"
 #include "vm/page.h"
 
 /* States in a thread's life cycle. */
@@ -94,42 +94,51 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int old_priority;                   /* Old Priority. */
-    int64_t wakeup_at;                  /* Time to wait before unblock. */
+    
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
-    struct list_elem sleepers_elem;     /* List element for sleepers_list. */
-
-    int nice;                           /* Nice Value. */
-    int recent_cpu;                     /* Approximation of recent 
-                                           cpu time used by this thread. */
+                                  
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
-    struct list locks_acquired ; /* Locks accquired list */
+    /************ T02 **************/
+    struct list locks_acquired ;        /* Locks accquired list */
     bool no_yield;
-    /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
-    /** UP03 **/
-    struct file *files[MAX_FILES];
-    struct spt_entry *mmap_files[MAX_FILES];
+    int old_priority;                   /* Old Priority. */
+    int64_t wakeup_at;                  /* Time to wait before unblock. */
+    struct list_elem sleepers_elem;     /* List element for sleepers_list. */
 
+    /************ T03 **************/
+    int nice;                           /* Nice Value. */
+    int recent_cpu;                     /* Approximation of recent cpu time used by this thread. */
+
+    /** UP03 **/
+    struct file *files[MAX_FILES];      /*files a thread can acquire */
+    
+    /** UP04 **/
     struct list_elem parent_elem;       /* list_elem for parent's children list */
     struct thread *parent;              /* Pointer to parent of the list. */
-    struct list children;               /* List of children of 
-                                           the current thread. */
-    struct hash supp_page_table;
-    struct semaphore sema_ready;
-    struct semaphore sema_terminated;
-    struct semaphore sema_ack;
-    int return_status;
-    bool load_complete;
+    struct list children;               /* List of children of the current thread. */
+    struct semaphore sema_ready;        /* semaphore that file is correctly loaded or not */
+    struct semaphore sema_terminated;   /* semaphore that child process is terminated */
+    struct semaphore sema_ack;          
+    int return_status;                  /* status of child */
+    bool load_complete;         
     struct file *executable_file;
+
+    /*******VM01********/
+    struct hash supp_page_table;      /* hash table of all the pages thread has */
+    
+    /*******VM02********/
+    struct spt_entry *mmap_files[MAX_FILES];
+
+
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+    
   };
 
 /* If false (default), use round-robin scheduler.
@@ -149,8 +158,6 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
-void thread_block_till (int64_t);
-void thread_set_next_wakeup (void);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
@@ -165,7 +172,7 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
-int thread_get_effective_priority(struct thread*);
+
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -173,21 +180,28 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 
-bool priority_cmp_mlfqs (const struct list_elem*, const struct list_elem*, void*);
-bool priority_cmp (const struct list_elem*, const struct list_elem*, void*);
-bool before (const struct list_elem*, const struct list_elem*, void*);
-
-void thread_priority_temporarily_up (void);
+/**************T01*******************/
+void thread_set_next_wakeup (void);
 void thread_priority_restore (void);
 
 
+/**************T02*******************/
+int thread_get_effective_priority(struct thread*);
+void thread_block_till (int64_t);
+bool priority_cmp (const struct list_elem*, const struct list_elem*, void*);
+bool before (const struct list_elem*, const struct list_elem*, void*);
+void thread_priority_temporarily_up (void);
+
+/**************T03*******************/
 void manager_wakeup(void);
 void timer_wakeup(void);
-
 void thread_update_priority (struct thread *);
 void thread_update_recent_cpu (struct thread *);
 void thread_update_load_avg (void);
+bool priority_cmp_mlfqs (const struct list_elem*, const struct list_elem*, void*);
 
+/*****UP04****/
 struct thread *get_child_thread_from_id (int);
+
 
 #endif /* threads/thread.h */

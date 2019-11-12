@@ -118,7 +118,7 @@ main (void)
   disk_init ();
   filesys_init (format_filesys);
 #endif
-
+  swap_init ();
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
@@ -286,10 +286,7 @@ run_task (char **argv)
   struct thread *child = get_child_thread_from_id (tid);
 
   if (child != NULL)
-  {
-    //sema_down (&child->sema_ready);
     sema_up (&child->sema_ack);
-  }
 
   process_wait (tid);
 #else
@@ -431,7 +428,7 @@ power_off (void)
 #ifdef FILESYS
   filesys_done ();
 #endif
-
+swap_end ();
   print_stats ();
 
   printf ("Powering off...\n");

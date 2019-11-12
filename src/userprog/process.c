@@ -1,4 +1,13 @@
 #include "userprog/process.h"
+#include "filesys/filesys.h"
+#include "threads/flags.h"
+#include "threads/init.h"
+#include "threads/interrupt.h"
+#include "threads/palloc.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -10,34 +19,14 @@
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
-#include "filesys/filesys.h"
-#include "threads/flags.h"
-#include "threads/init.h"
-#include "threads/interrupt.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "vm/frame.h"
-#include "vm/page.h"
 
+/************ UP01 ****************/
 const int WORD_SIZE = 4; /* Number of bytes per word */
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-void
-test_stack (int *t)
-{
-  int i;
-  int argc = t[1];
-  char ** argv;
 
-  argv = (char **) t[2];
-  printf("ARGC:%d ARGV:%x\n", argc, (unsigned int)argv);
-  for (i = 0; i < argc; i++)
-    printf("Argv[%d] = %x pointing at %s\n",
-           i, (unsigned int)argv[i], argv[i]);
-}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -79,14 +68,27 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  struct thread *cur = thread_current ();
-
   /* If load failed, quit. */
   palloc_free_page (file_name);
+
+
+  /************ UP04 ****************/
+  struct thread *cur = thread_current ();
+  
+  /*If file not loaded successfully then perform the thread exit
+    with storing proper exit status*/
+  
   if (!success){
+    /* Allows coordination between parent and child process 
+        sema_ready seamaphore waits till the file is loaded 
+        in the child process*/
     sema_up (&cur->sema_ready);
     enum intr_level old_level = intr_disable ();
     cur->no_yield = true;
+    
+    /*sema_terminated waits for wait() sycall to 
+      get the proper exit status of the child process
+      before exiting the child thread */
     sema_up (&cur->sema_terminated);
     
     thread_block ();
@@ -120,17 +122,26 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+
+  /************ Modified in UP04 ****************/
+
   struct thread *child = get_child_thread_from_id (child_tid);
+
   /* Either wait has already been called or 
      given tid is not a child of current thread. */
   if (child == NULL) 
     return -1;
-    list_remove (&child->parent_elem);
+
+  /* Remove child from the the list of child of the parent element*/
+  list_remove (&child->parent_elem);
   sema_down (&child->sema_terminated);
+
+  /* store the status of the child before blocking the child thread*/
   int status = child->return_status;
 
   thread_unblock (child);
 
+  /*Return the status of the exiting the child process*/
   return status;
 }
 
@@ -140,7 +151,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  struct hash *supp_page_table;
+
+  /************ Modified in UP04 ****************/
 
   /* Close current process's executable file and allow write. */
   if (cur->executable_file)
@@ -259,17 +271,19 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *cmd_line_input, void (**eip) (void), void **esp) 
 {
-  struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
+  struct thread *t = thread_current ();
   off_t file_ofs;
   bool success = false;
   int i;
 
+  /************ UP01 ****************/
   char *args, *file_name;
-  /* Separate file_name and args */
+  
+  /* Separate file_name and args from the command line input string */
   file_name = strtok_r (cmd_line_input, " ", &args);
-  /* printf ("file: %s \nargs: %s",file_name, args); */
+  
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -284,8 +298,12 @@ load (const char *cmd_line_input, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-   file_deny_write (file);
+
+  /************ Modified in UP04 ****************/
+  /* Deny the write rights to the executable file attched to the thread*/
+  file_deny_write (file);
   t->executable_file = file;
+
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -363,6 +381,11 @@ load (const char *cmd_line_input, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp, file_name, args))
     goto done;
+
+  /************ UP01 ****************/
+  /* This function was used in UP01 to check the arguments are 
+      properly loaded in the user program stack (not used 
+      once the syscalls are implemented)*/
   /* test_stack (*esp); */
 
   /* Start address. */
@@ -374,7 +397,9 @@ done:
   /* We shall close file at process_exit -> file_close (file); */
   return success;
 }
+
 
+
 /* load() helpers. */
 
 
@@ -458,6 +483,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
+          /************ Modified in VM01 ****************/
+          /* call the free frame function which uses virtual memory instead 
+            of normal palloc_free_page function*/
           free_frame (kpage);
           return false; 
         }
@@ -466,6 +494,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
+          /************ Modified in VM01 ****************/
+          /* call the free frame function which uses virtual memory instead 
+            of normal palloc_free_page function*/
           free_frame (kpage);
           return false; 
         }
@@ -484,15 +515,14 @@ setup_stack (void **esp, char *file_name, char *args)
 {
   uint8_t *kpage;
   bool success = false;
-  /*
-  kpage = frame_alloc (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);*/
 
-  success = grow_stack (((uint8_t *) PHYS_BASE) - PGSIZE);
+  success = grow_stack (((uint8_t *) PHYS_BASE) - PGSIZE ,false);
   if (success){
     *esp = PHYS_BASE;
+
+    /************ UP01 ****************/
+    /*Different functions to enable the arguments taking in the sytem 
+      calls by pushing them in the user stack*/
 
     /* Tokenize the string accross spaces (DELIMITER) */
     char *token, *save_ptr;
@@ -508,6 +538,7 @@ setup_stack (void **esp, char *file_name, char *args)
     }
     argv[argc] = NULL;
 
+    /************ UP01 ****************/
     /* Push the args to the stack */
     int i, bytes_written = 0;
     char *addr[LOADER_ARGS_LEN / 2 + 1];
@@ -523,12 +554,14 @@ setup_stack (void **esp, char *file_name, char *args)
     }
     addr[argc] = NULL;
 
+    /************ UP01 ****************/
     /* Align the stack pointer location to nearest WORD_SIZE multiple */
     uint8_t nulls[3] = {0,0,0};
     s = bytes_written % WORD_SIZE;
     *esp -= s;
     memcpy (*esp, nulls, s);
 
+    /************ UP01 ****************/
     /* Push addresses of argv array. */
     for (i = argc; i>=0; i--)
     {
@@ -537,17 +570,20 @@ setup_stack (void **esp, char *file_name, char *args)
       memcpy (*esp, addr + i, s);
     }
 
+    /************ UP01 ****************/
     /* Push argv start address. */
     char *argv_starting = *esp; 
     s = sizeof (argv_starting);
     *esp -= s;
     memcpy(*esp, &argv_starting, s);
 
+    /************ UP01 ****************/
     /* Push argc. */
     s = sizeof (int);
     *esp -= s;
     memcpy (*esp, &argc, s);
 
+    /************ UP01 ****************/
     /* Push return address (UNUSED). */
     argc = 0;
     s = sizeof (void (*) ());
@@ -576,3 +612,24 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+
+
+/************ UP01 ****************/
+/*We have already given a function to print the contents of this initial stack 
+  in a previous exercise. The function is reproduced here*/
+void
+test_stack (int *t)
+{
+  int i;
+  int argc = t[1];
+  char ** argv;
+
+  argv = (char **) t[2];
+  printf("ARGC:%d ARGV:%x\n", argc, (unsigned int)argv);
+  for (i = 0; i < argc; i++)
+    printf("Argv[%d] = %x pointing at %s\n",
+           i, (unsigned int)argv[i], argv[i]);
+}
+
+

@@ -16,4 +16,6 @@ void process_exit (void);
 void process_activate (void);
 bool install_page (void *, void *, bool);
 
+void test_stack(int *);
+
 #endif /* userprog/process.h */

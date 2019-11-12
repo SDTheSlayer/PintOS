@@ -4,10 +4,12 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/vaddr.h"
-#include "userprog/syscall.h"
 #include "vm/page.h"
 #include "userprog/process.h"
+
+/************ UP02 ****************/
+#include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -149,32 +151,47 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   bool loaded = false;
-  /* We should not panic when user space code is violating memory access*/
+
+  /************ Modified in UP02 and VM01 and VM02 ****************/
+  
+  /*In UP02: We should not panic when user space code is violating memory access*/
+
+  /*In VM01: Implemented demand paging in case of page fault if possible otherwise exit.
+             If the fault address is a valid fault address then we create spte entry
+              for the correspoding faulty virtual address*/
+
+  /*In VM02: On page faulting due to stack access implemented stack growth by installing 
+              more pages for the stack and creating respective supplement page table entry*/
+
   if (user)
   {
     if (!is_user_vaddr (fault_addr) || fault_addr == NULL)
       exit (NULL);
 
-    if (not_present)
+    if (!not_present)
+    {
+      struct spt_entry *spte = uvaddr_to_spt_entry (fault_addr);
+      if (write && !spte->writable)
+        exit (NULL);      
+    }
+    else
     {
       struct spt_entry *spte = uvaddr_to_spt_entry (fault_addr);
 
       if (spte != NULL && install_load_page (spte))
         loaded = true;
       else if (fault_addr >= f->esp - STACK_HEURISTIC &&
-               grow_stack (fault_addr))
+               grow_stack (fault_addr, false))
         loaded = true;
 
       if (!loaded)
         exit (NULL);
     }
-    else
-    {
-      struct spt_entry *spte = uvaddr_to_spt_entry (fault_addr);
-      if (write && !spte->writable)
-        exit (NULL);
-    }
   }
+
+  /************ Modified in VM01 ****************/
+  /* Page loading is not succeful on lazy loading or stack growth print the
+      page fault voilation message  that needs to be reported and kill the frame*/
 
   if (!loaded){
     /* To implement virtual memory, delete the rest of the function

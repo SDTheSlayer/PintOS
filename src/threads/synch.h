@@ -16,8 +16,6 @@ void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
-bool priority_sema (const struct list_elem *, const struct list_elem *,void *);
-bool cond_cmp (struct list_elem *, struct list_elem *, void *) ;
 
 /* Lock. */
 struct lock 
@@ -52,3 +50,7 @@ void cond_broadcast (struct condition *, struct lock *);
 #define barrier() asm volatile ("" : : : "memory")
 
 #endif /* threads/synch.h */
+
+/*******************T02********************/
+bool priority_sema (const struct list_elem *, const struct list_elem *,void *);
+bool cond_cmp (struct list_elem *, struct list_elem *, void *) ;

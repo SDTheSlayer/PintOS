@@ -66,10 +66,6 @@ palloc_init (void)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
-  //DEBUG STATEMENTS
-  printf("free_start is at: %p\n", &_end);
-  printf("kernel_pages local var is at: %p\n", &kernel_pages);
-  printf("pools are at: %p, %p\n", &user_pool, &kernel_pool);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -178,8 +174,6 @@ init_pool (struct pool *p, void *base, size_t page_cnt, const char *name)
   lock_init (&p->lock);
   p->used_map = bitmap_create_in_buf (page_cnt, base, bm_pages * PGSIZE);
   p->base = base + bm_pages * PGSIZE;
-    //DEBUG STATEMENTS
-  printf ("Base is at: %p\n", p->base);
 }
 
 /* Returns true if PAGE was allocated from POOL,

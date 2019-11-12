@@ -1,4 +1,4 @@
-#include "integer_arithmetic.h"
+#include "../lib/integer_arithmetic.h"
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
@@ -17,8 +17,8 @@
 #include "userprog/process.h"
 #endif
 
-/* Tasks */
 
+/**** T02 Task 1+2 *****/
 /* List of blocked processes.  Processes are added to this list
    when want to wait for some specified number of timer ticks and
    removed when their wait time elapses. */
@@ -26,6 +26,8 @@ static struct list sleepers_list;
 
 /* Stores the next wake up tick time. */
 static int64_t next_wakeup_at;
+
+
 
 
 /* Random value for struct thread's `magic' member.
@@ -43,6 +45,8 @@ static struct list all_list;
 
 /* Idle thread. */
 static struct thread *idle_thread;
+
+/** T03 **/
 /*** Manager Thread ***/
 static struct thread *manager_thread;
 /*** BSD scheduler thread ***/
@@ -50,12 +54,14 @@ static struct thread *bsd_scheduler_thread;
 
 static int load_avg;            /* # of ready and running threads. */
 
-/*** Indicates whether 100 Ticks (scheduler) has elapsed  and similariy for slice four ticks.***/
+/* Indicates whether 100 Ticks has elapsed and similariy for slice four ticks have elapsed or not .*/
 static bool schedule_sec;
 static bool schedule_slice;
 
 /*** Function of BSD scheduler ***/
 static void bsd_scheduler (void);
+
+
 
 /* Initial thread, the thread running init.c:main(). */
 static struct thread *initial_thread;
@@ -116,9 +122,8 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleepers_list);
-  // lock_init (&sleepers_lock);
   next_wakeup_at = INT64_MAX;
-  load_avg = 0;       /*** Load average ***/
+  load_avg = 0;       
   schedule_sec = false;   
   schedule_slice = false;
 
@@ -143,20 +148,20 @@ thread_start (void)
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
-  /* Wait for the idle thread to initialize idle_thread. */
+  /* Waits for idle thread to start and then create manager and bsd scheduler */
   sema_down (&idle_started);
-    thread_create ("manager_thread", PRI_MAX, manager_wakeup, NULL);
+  thread_create ("manager_thread", PRI_MAX, manager_wakeup, NULL);
   thread_create ("bsd_scheduler", PRI_MAX, bsd_scheduler, NULL);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context.
-   Also wakes up (puts a thread from sleepers_list to ready_list) 
-   if the current tick is a next_wakeup_at. */
+*/
 void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  // Increment rcent_cpu at every tick
   t->recent_cpu = _ADD_INT (t->recent_cpu, 1);
 
   /* Update statistics. */
@@ -169,15 +174,18 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+
   long long ticks = timer_ticks ();
   if (ticks >= next_wakeup_at && manager_thread->status==THREAD_BLOCKED)
   {
     thread_unblock (manager_thread);
   }
 
-/*** Makes schedule_sec true after every 100 ticks ***/
-if (ticks % TIMER_FREQ == 0)
+  /*** Makes schedule_sec true after every 100 ticks ***/
+  if (ticks % TIMER_FREQ == 0)
+  {
     schedule_sec = true;
+  }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -186,13 +194,12 @@ if (ticks % TIMER_FREQ == 0)
     intr_yield_on_return ();
   }
 
-    /*** schedule_sec for Task 2 and schedule_slice for Task 3 ***/
+  /*** schedule_sec for Task 2 and schedule_slice for Task 3 ***/
   if ((schedule_sec || schedule_slice) && bsd_scheduler_thread->status == THREAD_BLOCKED && thread_mlfqs)
   {
     thread_unblock (bsd_scheduler_thread);
     intr_yield_on_return ();
   }
-
 
 }
 
@@ -265,8 +272,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   
-  /* We should yield to the added thread if it has a higher priority than
-     the current thread.*/
+  /* Bring next thread to cpu */
   thread_yield ();
 
   return tid;
@@ -300,17 +306,15 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
-
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  // list_insert_ordered (&ready_list, &t->elem, priority_cmp, NULL); 
+  // push the blocked thread into ready list and change the thread status 
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
-
 
 
 /* Returns the name of the running thread. */
@@ -379,9 +383,12 @@ thread_yield (void)
 
   old_level = intr_disable ();
 
+  // Insert the running thread into ready list and then call scheduler
   if (cur != idle_thread) 
-        // list_insert_ordered (&ready_list, &cur->elem, priority_cmp, NULL); 
+  {    
     list_push_back (&ready_list, &cur->elem);
+  }
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -474,6 +481,7 @@ is_thread (struct thread *t)
 
 /* Does basic initialization of T as a blocked thread named
    NAME. */
+
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
@@ -489,37 +497,43 @@ init_thread (struct thread *t, const char *name, int priority)
   t->old_priority = priority;
   t->no_yield = false;
   t->wakeup_at = -1;
-  /* t->wakeup's initial value is never used, since whenever the thread will 
-     call timer_sleep this vairable will be changes and it is never used before
-     that */
+
   if (t == initial_thread)
     t->nice= 0;
   else
     t->nice = thread_current ()->nice;
 
   t->recent_cpu = 0;
+  /** T02 **/
   list_init (&t->locks_acquired);
+
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
-/** UP03 **/
-   t->executable_file = NULL;
+  
+  /** UP03 **/
+  t->executable_file = NULL;
   int i;
   for (i = 0; i<MAX_FILES; i++)
   {
     t->mmap_files[i] = NULL;
     t->files[i] = NULL;
   }
-
-  /* Set parent pointer, initialise children list, push to parent list. */
+  /****** UP04 ********/
+   /*  initialise children list,Set parent pointer, push to parent list. */
   if (t != initial_thread)
   {
     t->parent = thread_current();
     list_push_back (&(t->parent->children), &t->parent_elem);
   }
   else
+  {
     t->parent = NULL;
+  }  
+
   if (t != initial_thread)
+  {
     supp_page_table_init (&t->supp_page_table);
+  }  
   
   list_init (&t->children);
   sema_init (&t->sema_ready, 0);
@@ -552,19 +566,18 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  /* Ready list is no more ordered , hence remove list_max */
+  /* Remove the maximum priority thread */
   else
   {
     struct list_elem *e;
     if(thread_mlfqs==true)
     {
-       e= list_max (&ready_list, priority_cmp_mlfqs, NULL);
+       e = list_max (&ready_list, priority_cmp_mlfqs, NULL);
     }
     else
     {
       e = list_max (&ready_list, priority_cmp, NULL);
     }
-    
     list_remove (e);
     return list_entry (e, struct thread, elem);
   }
@@ -657,7 +670,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /** T01 Task 1 **/
 
-/* Temporarily increases the priority of the running thread to PRI_MAX*/
+/* increases the priority of the running thread to PRI_MAX temporarily */
 void
 thread_priority_temporarily_up()
 {
@@ -666,8 +679,7 @@ thread_priority_temporarily_up()
   thread_set_priority(PRI_MAX);
 }
 
-/* Restores the old priority of a thread which would have sometime increased
-   its priority temporarily */
+/* Restores the old priority of a thread which previosly called the function thread_priority_temporarily_up */
 void
 thread_priority_restore()
 {
@@ -675,57 +687,56 @@ thread_priority_restore()
   thread_set_priority(t->old_priority);
 }
 
-/* Comparision function used for sorting ready_list in accordance with
-   their priority in descending order. */
+/* Comparator used for sorting ready_list according to the priority in descending order. */
 bool
-priority_cmp_mlfqs (const struct list_elem *a, const struct list_elem *b,
+priority_cmp_mlfqs (const struct list_elem *list_elem_1, const struct list_elem *list_elem_2,
         void *aux UNUSED)
 {
-  struct thread *ta = list_entry (a, struct thread, elem);
-  struct thread *tb = list_entry (b, struct thread, elem);
-  return ta->priority < tb->priority ;
+  struct thread *thread_elem_1 = list_entry (list_elem_1, struct thread, elem);
+  struct thread *thread_elem_2 = list_entry (list_elem_2, struct thread, elem);
+  return thread_elem_1->priority < thread_elem_2->priority ;
 }
+
+/* Comparator used for sorting ready_list according to the effective priority in descending order. */
 bool
-priority_cmp (const struct list_elem *a, const struct list_elem *b,
+priority_cmp (const struct list_elem *list_elem_1, const struct list_elem *list_elem_2,
         void *aux UNUSED)
 {
-  struct thread *ta = list_entry (a, struct thread, elem);
-  struct thread *tb = list_entry (b, struct thread, elem);
-  return thread_get_effective_priority (ta) < thread_get_effective_priority (tb);
+  struct thread *thread_elem_1 = list_entry (list_elem_1, struct thread, elem);
+  struct thread *thread_elem_2 = list_entry (list_elem_2, struct thread, elem);
+  return thread_get_effective_priority (thread_elem_1) < thread_get_effective_priority (thread_elem_2);
 }
-
-
-
 
 
 /** T01 Task 2 **/
-
-/* Adds the current thread to sleepers_list (first diables interrupts so that
-   it is not preempted) and schedules blocks the current thread. */
+/* 
+  Get current thread
+  Disable interupts (to prevent pre-emption of current thread)
+  Change the next wakeup time and insert the current thread into the sleepers list
+*/
 void
 thread_block_till (int64_t wakeup_at)
 {
-  struct thread *cur = thread_current ();
+  struct thread *current = thread_current ();
   enum intr_level old_level;
   old_level = intr_disable ();
-  cur->wakeup_at = wakeup_at;
+  current->wakeup_at = wakeup_at;
   if (wakeup_at < next_wakeup_at)
     next_wakeup_at = wakeup_at;
-  list_insert_ordered (&sleepers_list, &cur->sleepers_elem, before, NULL);
+  list_insert_ordered (&sleepers_list, &current->sleepers_elem, before, NULL);
   thread_block ();
   intr_set_level (old_level);
 }
 
-/* Comparision function used for sorting sleepers_list in accordance with
-   their wakeup_at. */
+/* Comparator used for sorting sleepers_list according to
+   their wakeup time. */
 bool
-before (const struct list_elem *a, const struct list_elem *b,
+before (const struct list_elem *list_elem_1, const struct list_elem *list_elem_2,
         void *aux UNUSED)
 {
-  struct thread *ta = list_entry (a, struct thread, sleepers_elem);
-  struct thread *tb = list_entry (b, struct thread, sleepers_elem);
-
-  return ta->wakeup_at < tb->wakeup_at;
+  struct thread *thread_elem_1 = list_entry (list_elem_1, struct thread, sleepers_elem);
+  struct thread *thread_elem_2 = list_entry (list_elem_2, struct thread, sleepers_elem);
+  return thread_elem_1->wakeup_at < thread_elem_2->wakeup_at;
 }
 
 
@@ -736,7 +747,7 @@ before (const struct list_elem *a, const struct list_elem *b,
 /** T01 Task 3 **/
 
 /* Unblocks the first thread of sleepers_list if its wakeup time has arrived
-   and updates the next_wakeup_up in accordance to the first element in 
+   and updates the next_wakeup_at in accordance to the first element in 
    sleepers_list. */
 void
 thread_set_next_wakeup ()
@@ -756,7 +767,9 @@ thread_set_next_wakeup ()
       thread_unblock (t);
 
       if (list_empty (&sleepers_list))
+      {
         next_wakeup_at = INT64_MAX;
+      }
       else
       {
         front = list_front (&sleepers_list);
@@ -783,14 +796,16 @@ thread_set_priority (int new_priority)
   struct thread *t = thread_current ();
   int cur_priority = t->priority;
 
-  /* Thread must yield to higher priority thread if it exists, whenever its
-     own priority decreases. */
+  /* If the thread's new priority is lower than current priority then yield()*/
   t->priority = new_priority;
   if(new_priority < cur_priority)
     thread_yield ();
 }
 
-/* Returns the current thread's donated priority. */
+/* Returns the priority donated by the current thread */
+/* If we want Multi-Level Feedback Queue(MLFQS) then thread's current priority is returned
+   Otherwise return thread's effective priority
+  */
 int
 thread_get_priority (void) 
 {
@@ -800,8 +815,6 @@ thread_get_priority (void)
   }
   return thread_get_effective_priority(thread_current());
 }
-
-
 
 
 /** T02 Task 05 **/
@@ -827,7 +840,9 @@ thread_get_effective_priority (struct thread *t)
           struct thread *h = list_entry(w, struct thread, elem);
           int ep = thread_get_effective_priority(h);
           if(ep > max_priority)
+          {
             max_priority = ep;
+          }
         }
       }
     }
@@ -856,7 +871,8 @@ void manager_wakeup(void)
   }
 }
 
-/* Function to wake up all sleepers with wakeing time less than current time */
+/* Function to wake up all sleepers with wakeing time less than current time 
+   And then finally change the next wakeup time*/
 void
 timer_wakeup (void)
 {
@@ -880,10 +896,14 @@ timer_wakeup (void)
     }
   }
   if (list_empty (&sleepers_list))
+  {
     next_wakeup_at = INT64_MAX;
-  
+  }
+
   intr_set_level (old_level);
 }
+
+
 /* Updates priority of the given thread based on recent_cpu and nice value.
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2). */
 void
@@ -892,6 +912,7 @@ thread_update_priority (struct thread *t)
   int aux = _ADD_INT (_DIVIDE_INT (t->recent_cpu, 4), 2*t->nice);
   t->priority = _TO_INT_ZERO (_INT_SUB (PRI_MAX, aux));
 }
+
 
 /* Updates recent_cpu value using:
    recent_cpu = (2*load_avg )/(2*load_avg + 1) * recent_cpu + nice. */
@@ -915,23 +936,22 @@ thread_update_load_avg ()
        e = list_next (e))
   {
     struct thread *t = list_entry (e, struct thread, elem);
-    if (t != manager_thread &&
-        t != bsd_scheduler_thread &&
-        t != idle_thread)
+    if (t != manager_thread && t != bsd_scheduler_thread && t != idle_thread)
     {
       thread_cnt++;
     }
   }
+
   struct thread *t = thread_current ();
-  if (t != manager_thread &&
-      t != bsd_scheduler_thread &&
-      t != idle_thread)
+  if (t != manager_thread && t != bsd_scheduler_thread && t != idle_thread)
   {
     thread_cnt++;
   }
+
   int64_t num = _ADD_INT (_MULTIPLY_INT (load_avg, 59), thread_cnt);
   load_avg = _DIVIDE_INT (num, 60);
 }
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
@@ -939,7 +959,7 @@ thread_set_nice (int nice UNUSED)
   struct thread *t = thread_current ();
   t->nice = nice;
   thread_update_priority (t);
-  /* If due to nice value change the priority decreases then it must yield. */
+  /* If priority decreases due to nice value then yield it. */
   thread_yield (); 
 }
 
@@ -963,13 +983,19 @@ thread_get_recent_cpu (void)
 {
   return _TO_INT_NEAREST (_MULTIPLY_INT (thread_current ()->recent_cpu, 100));
 }
-
+/*
+This type of scheduler maintains several queues of ready-to-run threads,
+ where each queue holds threads with a different priority.
+At any given time, the scheduler chooses a thread from the highest-priority non-empty queue.
+If the highest-priority queue contains multiple threads,
+ then they run in "round robin" order.
+*/
 
 void bsd_scheduler ()
 {
   bsd_scheduler_thread = thread_current ();
   enum intr_level old_level;
-  struct list_elem *e;
+  struct list_elem *elem;
 
   while (true)
   {
@@ -982,13 +1008,11 @@ void bsd_scheduler ()
       if (schedule_sec)
       {
         thread_update_load_avg ();
-        for (e = list_begin (&all_list); e != list_end (&all_list);
-             e = list_next (e))
+        for (elem = list_begin (&all_list); elem != list_end (&all_list);
+             elem = list_next (elem))
         {
-          struct thread *t = list_entry (e, struct thread, allelem);
-          if (t != manager_thread &&
-              t != bsd_scheduler_thread &&
-              t != idle_thread)
+          struct thread *t = list_entry (elem, struct thread, allelem);
+          if (t != manager_thread && t != bsd_scheduler_thread && t != idle_thread)
           {
             thread_update_recent_cpu (t);
           }
@@ -997,13 +1021,11 @@ void bsd_scheduler ()
       }
       if (schedule_slice)
       {
-        for (e = list_begin (&all_list); e != list_end (&all_list);
-             e = list_next (e))
+        for (elem = list_begin (&all_list); elem != list_end (&all_list);
+             elem = list_next (elem))
         {
-          struct thread *t = list_entry (e, struct thread, allelem);
-          if (t != manager_thread &&
-              t != bsd_scheduler_thread &&
-              t != idle_thread)
+          struct thread *t = list_entry (elem, struct thread, allelem);
+          if (t != manager_thread && t != bsd_scheduler_thread && t != idle_thread)
           {
             thread_update_priority (t);
           }
@@ -1016,7 +1038,8 @@ void bsd_scheduler ()
 }
 
 
-
+/*********UP04**************/
+/* Extracting child thread from id */
 struct thread *
 get_child_thread_from_id (int id)
 {
