@@ -25,7 +25,8 @@ static struct list frame_table;
 /* Lock to edit frame table */ 
 static struct lock frame_table_lock;
 
-
+/*** Free frames finds the frame to be cleared in the frame table 
+***/
 void free_frame (void *frame)
 {
   struct frame_table_entry *fte;
@@ -60,18 +61,22 @@ static struct frame_table_entry * get_victim_frame ()
 {
   ASSERT (lock_held_by_current_thread (&frame_table_lock));
   struct list_elem *e;
-  
-  /* Phase 1: Remove Dirty */
-  for (e = list_begin (&frame_table);
-       e != list_end (&frame_table);
-       e = list_next (e))
+  /***
+  Frames in Main Memory are classified on the basis of Access and Modification (Dirty bit)
+  00 --> neither recently used not modified – best page to replace
+  01 --> not recently used but modified – not quite as good, must write out before replacement
+  10 --> recently used but clean – probably will be used again soon
+  11 --> recently used and modified – probably will be used again soon and need to write out before replacement
+
+  ***/
+  /* Phase 1: All dirty frames are written back to disk
+              If 00 frame is found it is choosen as a victim */
+  for (e = list_begin (&frame_table);e != list_end (&frame_table);e = list_next (e))
   {
     struct frame_table_entry *fte =
       list_entry (e, struct frame_table_entry, elem);
-    bool is_dirty = pagedir_is_dirty (fte->t->pagedir,
-                                      fte->spte->upage);
-    bool is_accessed = pagedir_is_accessed (fte->t->pagedir,
-                                            fte->spte->upage);
+    bool is_dirty = pagedir_is_dirty (fte->t->pagedir,fte->spte->upage);
+    bool is_accessed = pagedir_is_accessed (fte->t->pagedir,fte->spte->upage);
 
     if (!fte->spte->pinned)
     {
@@ -93,17 +98,18 @@ static struct frame_table_entry * get_victim_frame ()
     }
   }
 
-  /* Phase 2: Remove Accessed */
+  /*** Phase 2: After previous phase all 01,11 --> 00,10
+                Now access bit is reset
+                If we find 00 then it is chosen as victim frame
+   ***/
   for (e = list_begin (&frame_table);
        e != list_end (&frame_table);
        e = list_next (e))
   {
     struct frame_table_entry *fte =
       list_entry (e, struct frame_table_entry, elem);
-    bool is_dirty = pagedir_is_dirty (fte->t->pagedir,
-                                      fte->spte->upage);
-    bool is_accessed = pagedir_is_accessed (fte->t->pagedir,
-                                            fte->spte->upage);
+    bool is_dirty = pagedir_is_dirty (fte->t->pagedir,fte->spte->upage);
+    bool is_accessed = pagedir_is_accessed (fte->t->pagedir,fte->spte->upage);
 
     if (!fte->spte->pinned)
     {
@@ -114,13 +120,15 @@ static struct frame_table_entry * get_victim_frame ()
     }
   }
 
+  /***
+  Phase 3:
+  All frames in memory are now of the type 00 so
+  we find victim on the basis of FIFO 
+  ***/
   ASSERT (!list_empty (&frame_table));
-  for (e = list_begin (&frame_table);
-       e != list_end (&frame_table);
-       e = list_next (e))
+  for (e = list_begin (&frame_table);e != list_end (&frame_table);e = list_next (e))
   {
-    struct frame_table_entry *fte =
-      list_entry (e, struct frame_table_entry, elem);
+    struct frame_table_entry *fte = list_entry (e, struct frame_table_entry, elem);
     if (!fte->spte->pinned){
       return fte;
     }
@@ -137,9 +145,6 @@ bool evict_frame (struct frame_table_entry *fte)
   size_t idx;
   switch (spte->type){
   case MMAP:
-
-    /* Given frame to evict of type FILE or MMAP will 
-       never be dirty. */
 
     if (pagedir_is_dirty (fte->t->pagedir, spte->upage))
         if (!write_to_disk (spte))
@@ -179,7 +184,8 @@ bool evict_frame (struct frame_table_entry *fte)
 
 
 
-/* Assign a frame to a page after checking if it is a valid request and a frame can be allocated*/
+/*** Assign a frame to a page after checking if it is a valid request and a frame can be allocated
+***/
 void * get_frame_for_page (enum palloc_flags flags, struct spt_entry *spte)
 {
   if(spte == NULL)
@@ -203,7 +209,8 @@ void * get_frame_for_page (enum palloc_flags flags, struct spt_entry *spte)
 }
 
 
-/* Allocated a frame given the palloc flags (frame is also in essense stored on memeory hence we need a page for it as well) */
+/*** Allocated a frame given the palloc flags (frame is also in essense stored on memeory hence we need a page for it as well)
+***/
 static void *
 frame_alloc (enum palloc_flags flags)
 {
@@ -222,15 +229,9 @@ if (flags & PAL_USER == 0)
 
       struct frame_table_entry *fte = get_victim_frame ();
 
-      /* Always get some frame to evict. */
       ASSERT (fte != NULL);
-
-      /* Check not corrupt fte or spte. */
-      /*printf ("\nhere::%p, %s, %p, %d, %p, %p", fte->t,
-        fte->t->name, fte->spte, fte->spte->type,
-        fte->spte->frame, fte->spte->upage);*/
-      ASSERT (fte->spte->type < 3 && fte->spte->type >= 0 &&
-              fte->frame != NULL);
+      
+      ASSERT (fte->spte->type < 3 && fte->spte->type >= 0 && fte->frame != NULL);
       ASSERT (fte->spte->frame != NULL);
 
       bool evicted = evict_frame (fte);
